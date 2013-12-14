@@ -23,18 +23,8 @@ void setup() {
   // initialize the digital pin as an output.
   pinMode(RED_LED_PIN, OUTPUT);
   strip.begin();
+  strip.setBrightness(30);
   strip.show(); // Initialize all pixels to 'off'
-/*
-strip.setBrightness(30);
-   strip.setPixelColor(0, 0,0,0);
-   strip.setPixelColor(1, 0,0,0);
-   strip.setPixelColor(2, 0,0,0);
-   strip.setPixelColor(3, 0,0,0);
-   strip.setPixelColor(4, 0,0,0);
-   strip.setPixelColor(5, 0,0,0);
-   strip.setPixelColor(6, 0,0,0);
-   strip.setPixelColor(7, 0,0,0);
-*/
 }
 
 void loop() {
