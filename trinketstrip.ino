@@ -3,7 +3,7 @@
 #include <avr/power.h>
 #include <Adafruit_NeoPixel.h>
 
-#define RED_LED 1                 // pulse 'digital' pin 1 - AKA the built in red LED
+#define RED_LED_PIN 1                 // pulse 'digital' pin 1 - AKA the built in red LED
 #define NUM_OF_PIXELS_IN_STRIP 8
 #define STRIP_PIN 0
 
@@ -21,7 +21,7 @@ void setup() {
   if (F_CPU == 16000000) clock_prescale_set(clock_div_1);
   
   // initialize the digital pin as an output.
-  pinMode(RED_LED, OUTPUT);
+  pinMode(RED_LED_PIN, OUTPUT);
   strip.begin();
   strip.show(); // Initialize all pixels to 'off'
 /*
@@ -45,7 +45,7 @@ void loop() {
     strip.setPixelColor(1, 0,i,0);
     strip.setPixelColor(2, 0,0,i);
     strip.show();
-    analogWrite(led, i); // PWM the LED from 0 to 255 (max)
+    analogWrite(RED_LED_PIN, i); // PWM the LED from 0 to 255 (max)
    
     delay(5);
     }
@@ -55,7 +55,7 @@ void loop() {
     strip.setPixelColor(1, 0,i,0);
     strip.setPixelColor(2, 0,0,i);
     strip.show();
-    analogWrite(RED_LED, i); // PWM the LED from 0 to 255 (max)
+    analogWrite(RED_LED_PIN, i); // PWM the LED from 0 to 255 (max)
    
     delay(5);
     }

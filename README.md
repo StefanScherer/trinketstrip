@@ -7,7 +7,7 @@ This is a small LED strip project with Adafruit Trinket and NeoPixel strip.
 
 - Author:: Stefan Scherer
 
-[MIT License](https://github.com/StefanScherer/trinketstrip/blob/master/LICENSE.md)
+[MIT License](https://github.com/StefanScherer/trinketstrip/blob/master/LICENSE)
 
 ## Installation
 
