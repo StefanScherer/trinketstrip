@@ -49,7 +49,7 @@ This paragraph must be included in any redistribution.
 #include <Adafruit_NeoPixel.h>
 
 
-#define N_PIXELS   8  // Number of pixels in strand
+#define N_PIXELS   80  // Number of pixels in strand
 #define MIC_PIN    1  // Microphone is attached to this analog pin
 #define STRIP_PIN  0  // NeoPixel LED strand is connected to this pin
 #define DC_OFFSET  0  // DC offset in mic signal - if unusure, leave 0
@@ -88,7 +88,6 @@ byte reverse = 0;
 
 byte
   peak      = 0,      // Used for falling dot
-  dotCount  = 0,      // Frame counter for delaying dot-falling speed
   volCount  = 0;      // Frame counter for storing past volume data
 int
   vol[SAMPLES],       // Collection of prior volume samples
@@ -470,11 +469,13 @@ void vumeter()
 
   // Every few frames, make the peak pixel drop by 1:
 
-  if(++dotCount >= PEAK_FALL)
-    { //fall rate 
-      if(peak > 0) peak--;
-      dotCount = 0;
-    }
+  if (millis() - lastTime >= DOT_RUN_MILLIS)
+  {
+    lastTime = millis();
+
+    //fall rate 
+    if(peak > 0) peak--;
+  }
 
   vol[volCount] = n;                      // Save sample for dynamic leveling
   if(++volCount >= SAMPLES) volCount = 0; // Advance/rollover sample counter
