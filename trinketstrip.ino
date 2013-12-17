@@ -56,9 +56,9 @@ This paragraph must be included in any redistribution.
 #define NOISE    100  // Noise/hum/interference in mic signal
 #define SAMPLES   30  // Length of buffer for dynamic level adjustment
 #define TOP       (N_PIXELS + 1) // Allow dot to go slightly off scale
-#define PEAK_FALL 80  // Rate of peak falling dot
+#define PEAK_FALL_MILLIS 10  // Rate of peak falling dot
 
-#define DOT_RUN_MILLIS 40
+#define DOT_RUN_MILLIS 20
 
 #define BUTTON_PIN 1
 
@@ -79,6 +79,7 @@ enum
   MODE_WIPE_YELLOW,
   MODE_WIPE_CYAN,
   MODE_WIPE_MAGENTA,
+  MODE_WIPE_COLORS,
   MODE_MAX
 } MODE;
 
@@ -90,8 +91,9 @@ byte
   peak      = 0,      // Used for falling dot
   volCount  = 0;      // Frame counter for storing past volume data
 int
-  vol[SAMPLES],       // Collection of prior volume samples
-  lvl       = 10,      // Current "dampened" audio level
+  vol[SAMPLES];       // Collection of prior volume samples
+int
+ lvl       = 10,      // Current "dampened" audio level
   minLvlAvg = 0,      // For dynamic adjustment of graph low & high
   maxLvlAvg = 512;
   
@@ -261,7 +263,7 @@ void debounceButton()
       // only toggle the LED if the new button state is HIGH
       if (buttonState == HIGH) {
         peak = 0;
-        lvl = 0;
+        lvl = 10;
         mode++;
         if (mode >= MODE_MAX) {
           mode = 0;
@@ -426,8 +428,6 @@ void rainbowCycle() {
 }
 
 
-
-
 void vumeter()
 {
   uint8_t  i;
@@ -446,6 +446,28 @@ void vumeter()
   else if(height > TOP) height = TOP;
   if(height > peak)     peak   = height; // Keep 'peak' dot at top
 
+#ifdef CENTERED
+ // Color pixels based on rainbow gradient
+  for(i=0; i<(N_PIXELS/2); i++) {
+    if(((N_PIXELS/2)+i) >= height)
+    {
+      strip.setPixelColor(((N_PIXELS/2) + i),   0,   0, 0);
+      strip.setPixelColor(((N_PIXELS/2) - i),   0,   0, 0);
+    }
+    else
+    {
+      strip.setPixelColor(((N_PIXELS/2) + i),Wheel(map(((N_PIXELS/2) + i),0,strip.numPixels()-1,30,150)));
+      strip.setPixelColor(((N_PIXELS/2) - i),Wheel(map(((N_PIXELS/2) - i),0,strip.numPixels()-1,30,150)));
+    }
+  }
+  
+  // Draw peak dot  
+  if(peak > 0 && peak <= LAST_PIXEL_OFFSET)
+  {
+    strip.setPixelColor(((N_PIXELS/2) + peak),255,255,255); // (peak,Wheel(map(peak,0,strip.numPixels()-1,30,150)));
+    strip.setPixelColor(((N_PIXELS/2) - peak),255,255,255); // (peak,Wheel(map(peak,0,strip.numPixels()-1,30,150)));
+  }
+#else
   // Color pixels based on rainbow gradient
   for(i=0; i<N_PIXELS; i++)
   {
@@ -465,17 +487,19 @@ void vumeter()
     strip.setPixelColor(peak,255,255,255); // (peak,Wheel(map(peak,0,strip.numPixels()-1,30,150)));
   }
   
-  strip.show(); // Update strip
+#endif  
 
   // Every few frames, make the peak pixel drop by 1:
 
-  if (millis() - lastTime >= DOT_RUN_MILLIS)
+  if (millis() - lastTime >= PEAK_FALL_MILLIS)
   {
     lastTime = millis();
 
+    strip.show(); // Update strip
+
     //fall rate 
     if(peak > 0) peak--;
-  }
+    }
 
   vol[volCount] = n;                      // Save sample for dynamic leveling
   if(++volCount >= SAMPLES) volCount = 0; // Advance/rollover sample counter
