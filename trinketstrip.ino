@@ -6,12 +6,15 @@
  
  Hardware requiremetns:
  - Adafruit Trinket (ATTiny85)
- - Adafruit Electret Microphone Amplifier (ID: 1063)
+( - Adafruit Electret Microphone Amplifier (ID: 1063)
    connected to Trinket pin #2 (analog A1)
+DISCONNECTED AT THE MOMENT
+)
+   
  - Adafruit NeoPixel Digitial LED strip or anything like that
    connectet to Trinket pin #0
- - a button
-   connected to Trinket pin #1 and 5V
+ - an IR receiver (TSOP 4838)
+   connected to Trinket pin #2 and 5V
 
  Written by Stefan Scherer under the BSD license.
  This parapgraph must be included in any redistribution.
@@ -60,7 +63,12 @@ This paragraph must be included in any redistribution.
 
 #define DOT_RUN_MILLIS 20
 
+#ifdef USE_BUTTON
 #define BUTTON_PIN 1
+#else
+#define IR_PIN           2
+#define IR_PIN_INTERRUPT PCINT2
+#endif
 
 #define LAST_PIXEL_OFFSET N_PIXELS-1
 
@@ -68,9 +76,11 @@ enum
 {
   MODE_OFF,
   MODE_VUMETER,
+#ifdef DOT
   MODE_DOT_UP,
   MODE_DOT_DOWN,
   MODE_DOT_ZIGZAG,
+#endif
   MODE_RAINBOW,
   MODE_RAINBOW_CYCLE,
   MODE_WIPE_RED,
@@ -108,6 +118,7 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel(N_PIXELS, STRIP_PIN, NEO_GRB + NEO_K
 
 long lastTime = 0;
 
+#ifdef USE_BUTTON
 // Variables will change:
 byte buttonState;             // the current reading from the input pin
 byte lastButtonState = LOW;   // the previous reading from the input pin
@@ -115,18 +126,87 @@ byte lastButtonState = LOW;   // the previous reading from the input pin
 // will quickly become a bigger number than can be stored in an int.
 long lastDebounceTime = 0;  // the last time the output pin was toggled
 #define DEBOUNCE_DELAY 50  // the debounce time; increase if the output flickers
+#else
 
+
+// After this much time has elapsed after the last transition, consider the
+// message complete.
+#define MSG_COMMIT_TIME_MICROSEC 30000
+
+enum IRProtocolState { Idle, Building };
+
+unsigned long timeOfLastIRPinChange;  // Time when the last pin change happened on the IR decoder.
+unsigned long timeToCommitMessage;    // Time after which we should consider the message complete.
+unsigned long message;                // Workspace where the message is built up.
+unsigned long lastMessage;            // only used for simple IR button switcher for any IR button pressed
+byte irProtocolState;      // What our protocol decoder is doing.
+
+void processIRMessage(long message);
+
+ISR(PCINT0_vect)
+{
+  boolean isPinHigh = digitalRead(IR_PIN);
+  long currentTime = micros();
+  long microsSinceLastChange = (currentTime - timeOfLastIRPinChange);
+  timeOfLastIRPinChange = currentTime;
+  
+  // Bump up the commit time, since we got a level change.
+  timeToCommitMessage = MSG_COMMIT_TIME_MICROSEC + timeOfLastIRPinChange;
+  if (!isPinHigh)
+  {
+     // Going low.
+    if (microsSinceLastChange < 700)
+    {
+      // Space
+      message = message << 1;
+    }
+    if (microsSinceLastChange < 2000)
+    {
+      // Mark.
+      message = message << 1;
+      message |= 1;
+    }
+    else if (microsSinceLastChange < 20000)
+    {
+      // First LOW.
+      message = 0;
+      irProtocolState = Building;
+    }
+  }
+  
+}
+#endif
+
+#ifndef cbi
+#define cbi(sfr, bit) (_SFR_BYTE(sfr) &= _BV(bit))
+#endif
+#ifndef sbi
+#define sbi(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit))
+#endif
 
 void setup() {
   // initialize trinket to run at 16MHz
   if (F_CPU == 16000000) clock_prescale_set(clock_div_1);
   
+#ifdef USE_BUTTON
   pinMode(BUTTON_PIN, INPUT);
+#endif
   
   strip.begin();
   strip.setBrightness(30);
   strip.show(); // Initialize all pixels to 'off'
   
+#ifndef USE_BUTTON
+  pinMode(IR_PIN, INPUT);
+  sbi(GIMSK,PCIE);              // Enable pin change interrupt
+  sbi(PCMSK,IR_PIN_INTERRUPT);  // Enable the interrupt for only pin 1.
+
+  lastMessage = 0;
+  timeOfLastIRPinChange = micros();
+  timeToCommitMessage = -1;
+  irProtocolState = Idle;
+#endif
+
   // This is only needed on 5V Arduinos (Uno, Leonardo, etc.).
   // Connect 3.3V to mic AND TO AREF ON ARDUINO and enable this
   // line.  Audio samples are 'cleaner' at 3.3V.
@@ -143,10 +223,25 @@ void setup() {
 
 
 
-void loop() {
-  
+void loop()
+{
+#ifdef USE_BUTTON
   debounceButton();  // updates mode if button was pressed
-  
+#else
+  // Check to see if we can commit a message. If so, process it.
+  if (micros() >= timeToCommitMessage && irProtocolState == Building)
+  {
+    long localMessage = message;
+    message = 0;
+    irProtocolState = Idle;
+    if (lastMessage != localMessage)
+    {
+      lastMessage = localMessage;
+      switchMode();
+    }
+  }
+#endif
+
   switch (mode) {
     case MODE_OFF:
       off();
@@ -156,6 +251,7 @@ void loop() {
       vumeter();
       break;
 
+#ifdef DOT
     case MODE_DOT_UP:
       runningDotUp();
       break;
@@ -167,6 +263,7 @@ void loop() {
     case MODE_DOT_ZIGZAG:
       runningDotZigZag();
       break;
+#endif
 
     case MODE_RAINBOW:
       rainbow();
@@ -230,12 +327,23 @@ void errorBlinkRedLed()
   }
 }
 
+void switchMode()
+{
+  peak = 0;
+  lvl = 10;
+  mode++;
+  if (mode >= MODE_MAX)
+  {
+    mode = peak;
+  }
+}
 
 /*
  Debounce button on pin 1 of trinket.
  Derived from http://www.arduino.cc/en/Tutorial/Debounce
  */
  
+#ifdef USE_BUTTON
 void debounceButton()
 {
   // Some example procedures showing how to display to the pixels:
@@ -247,27 +355,26 @@ void debounceButton()
   // long enough since the last press to ignore any noise:  
 
   // If the switch changed, due to noise or pressing:
-  if (reading != lastButtonState) {
+  if (reading != lastButtonState)
+  {
     // reset the debouncing timer
     lastDebounceTime = millis();
   }
  
-  if ((millis() - lastDebounceTime) > DEBOUNCE_DELAY) {
+  if ((millis() - lastDebounceTime) > DEBOUNCE_DELAY)
+  {
     // whatever the reading is at, it's been there for longer
     // than the debounce delay, so take it as the actual current state:
 
     // if the button state has changed:
-    if (reading != buttonState) {
+    if (reading != buttonState)
+    {
       buttonState = reading;
 
       // only toggle the LED if the new button state is HIGH
-      if (buttonState == HIGH) {
-        peak = 0;
-        lvl = 10;
-        mode++;
-        if (mode >= MODE_MAX) {
-          mode = 0;
-        }
+      if (buttonState == HIGH)
+      {
+        switchMode();
       }
     }
   }
@@ -276,8 +383,9 @@ void debounceButton()
   // it'll be the lastButtonState:
   lastButtonState = reading;
 }
+#endif
 
-
+#ifdef DOT
 void runningDotUp()
 {
   if (millis() - lastTime >= DOT_RUN_MILLIS)
@@ -338,6 +446,7 @@ byte runningDotZigZag()
     }
   }
 }
+#endif
 
 void drawDot()
 {
@@ -354,7 +463,6 @@ void drawDot()
   }
   strip.show();
 }
-
 
 // Fill the dots one after the other with a color
 void colorWipe(uint8_t r, uint8_t g, uint8_t b)
